@@ -55,7 +55,7 @@ public class HotItems {
 		// 为了打印到控制台的结果不乱序，我们配置全局的并发为1，改变并发对结果正确性没有影响
 		env.setParallelism(1);
 
-		// UserBehavior.csv 的本地文件路径, 在 resources 目录下
+		// UserBehavior2.csv 的本地文件路径, 在 resources 目录下
 		URL fileUrl = HotItems.class.getClassLoader().getResource("UserBehavior.csv");
 		Path filePath = Path.fromLocalFile(new File(fileUrl.toURI()));
 		// 抽取 UserBehavior 的 TypeInformation，是一个 PojoTypeInfo
