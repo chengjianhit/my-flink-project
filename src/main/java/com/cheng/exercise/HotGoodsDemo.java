@@ -34,8 +34,9 @@ public class HotGoodsDemo {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         //按照EventTime处理
         env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
-        env.setParallelism(1);
+        env.setParallelism(3);
 
+//        env.setStateBackend();
         URL resource = HotGoodsDemo.class.getClassLoader().getResource("UserBehavior.csv");
 
         Path filePath = Path.fromLocalFile(new File(resource.toURI()));
@@ -64,6 +65,7 @@ public class HotGoodsDemo {
                 .process(new TopNHotItems(3))
                 .print();
 
+        System.out.println(env.getExecutionPlan());
         env.execute("Cheng Hot Job");
 
 
