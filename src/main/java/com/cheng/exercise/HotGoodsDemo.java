@@ -3,6 +3,7 @@ package com.cheng.exercise;
 import lombok.Data;
 import org.apache.flink.api.common.functions.AggregateFunction;
 import org.apache.flink.api.common.functions.FilterFunction;
+import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.java.io.PojoCsvInputFormat;
@@ -13,6 +14,10 @@ import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.streaming.api.TimeCharacteristic;
+import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.datastream.KeyedStream;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.datastream.WindowedStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.streaming.api.functions.timestamps.AscendingTimestampExtractor;
@@ -20,6 +25,7 @@ import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.util.Collector;
+import org.apache.flink.util.StringUtils;
 
 import java.io.File;
 import java.net.URL;
@@ -37,31 +43,60 @@ public class HotGoodsDemo {
         env.setParallelism(3);
 
 //        env.setStateBackend();
-        URL resource = HotGoodsDemo.class.getClassLoader().getResource("UserBehavior.csv");
+//        URL resource = HotGoodsDemo.class.getClassLoader().getResource("UserBehavior.csv");
 
-        Path filePath = Path.fromLocalFile(new File(resource.toURI()));
-        PojoTypeInfo<UserBehavior> pojoType = (PojoTypeInfo<UserBehavior>)TypeExtractor.createTypeInfo(UserBehavior.class);
-        String[] fieldOrder = new String[]{"userId", "itemId", "categoryId", "behavior", "timestamp"};
-        PojoCsvInputFormat<UserBehavior> csvInput = new PojoCsvInputFormat<>(filePath, pojoType, fieldOrder);
+//        Path filePath = Path.fromLocalFile(new File(resource.toURI()));
 
-        env
-                .createInput(csvInput, pojoType)
-                .assignTimestampsAndWatermarks(new AscendingTimestampExtractor<UserBehavior>() {
-                    @Override
-                    public long extractAscendingTimestamp(UserBehavior element) {
-                        return element.timestamp * 1000;
-                    }
-                })
-                .filter(new FilterFunction<UserBehavior>() {
-                    @Override
-                    public boolean filter(UserBehavior value) throws Exception {
-                        return value.behavior.equals("pv");
-                    }
-                })
-                .keyBy("itemId")
-                .timeWindow(Time.minutes(60), Time.minutes(5))
-                .aggregate(new CountAgg(), new WindowResultFunction())
-                .keyBy("windowEnd")
+//        Path filePath = Path.fromLocalFile(new File("UserBehavior2.csv"));
+//        PojoTypeInfo<UserBehavior> pojoType = (PojoTypeInfo<UserBehavior>)TypeExtractor.createTypeInfo(UserBehavior.class);
+//        String[] fieldOrder = new String[]{"userId", "itemId", "categoryId", "behavior", "timestamp"};
+//        PojoCsvInputFormat<UserBehavior> csvInput = new PojoCsvInputFormat<>(filePath, pojoType, fieldOrder);
+
+//        env
+//                .createInput(csvInput, pojoType)
+//                .assignTimestampsAndWatermarks(new AscendingTimestampExtractor<UserBehavior>() {
+//                    @Override
+//                    public long extractAscendingTimestamp(UserBehavior element) {
+//                        return element.timestamp * 1000;
+//                    }
+//                })
+//                .filter(new FilterFunction<UserBehavior>() {
+//                    @Override
+//                    public boolean filter(UserBehavior value) throws Exception {
+//                        return value.behavior.equals("pv");
+//                    }
+//                })
+//                .keyBy("itemId")
+//                .timeWindow(Time.minutes(60), Time.minutes(5))
+//                .aggregate(new CountAgg(), new WindowResultFunction())
+//                .keyBy("windowEnd")
+//                .process(new TopNHotItems(3))
+//                .print();
+
+        DataStream<UserBehavior> dataStream = env.readTextFile("UserBehavior2.csv").map(new MapFunction<String, UserBehavior>() {
+            @Override
+            public UserBehavior map(String value) throws Exception {
+                String[] splitArray = value.split(",");
+                return new UserBehavior(Long.valueOf(splitArray[0]), Long.valueOf(splitArray[1]), Long.valueOf(splitArray[2]), splitArray[3], Long.valueOf(splitArray[4]));
+            }
+        });
+
+        DataStream<UserBehavior> assignData = dataStream.assignTimestampsAndWatermarks(new AscendingTimestampExtractor<UserBehavior>() {
+            @Override
+            public long extractAscendingTimestamp(UserBehavior element) {
+                return element.timestamp * 1000;
+            }
+        });
+
+        DataStream<UserBehavior> pvData = assignData.filter(element -> element.getBehavior().equals("pv") ? true : false);
+
+        KeyedStream<UserBehavior, Tuple> keyedData = pvData.keyBy("itemId");
+
+        WindowedStream<UserBehavior, Tuple, TimeWindow> windowedStream = keyedData.timeWindow(Time.minutes(60), Time.minutes(5));
+
+        DataStream<ItemViewCount> aggregateData = windowedStream.aggregate(new CountAgg(), new WindowResultFunction());
+
+        aggregateData.keyBy("windowEnd")
                 .process(new TopNHotItems(3))
                 .print();
 
@@ -192,5 +227,16 @@ public class HotGoodsDemo {
         public String behavior;
         //时间戳
         public long timestamp;
+
+        public UserBehavior() {
+        }
+
+        public UserBehavior(long userId, long itemId, long categoryId, String behavior, long timestamp) {
+            this.userId = userId;
+            this.itemId = itemId;
+            this.categoryId = categoryId;
+            this.behavior = behavior;
+            this.timestamp = timestamp;
+        }
     }
 }

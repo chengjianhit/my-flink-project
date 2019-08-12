@@ -1,6 +1,7 @@
 package com.cheng.exercise;
 
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.flink.api.common.functions.FoldFunction;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple;
@@ -15,6 +16,7 @@ import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunctio
 import java.util.HashMap;
 import java.util.Random;
 
+@Slf4j
 public class RealTimeOrderStatistic {
     private static class DataSource extends RichParallelSourceFunction<Tuple2<String, Integer>> {
         private volatile boolean isRunning = true;
@@ -64,9 +66,9 @@ public class RealTimeOrderStatistic {
             @Override
             public void invoke(HashMap<String, Integer> value, Context context) throws Exception {
                 // 每个类型的商品成交量
-                System.out.println("每个类型商品的成交情况" + value);
+                log.info("每个类型商品的成交情况" + value);
                 // 商品成交总量
-                System.out.println("商品成交总量" + value.values().stream().mapToInt(v -> v).sum());
+                log.info("商品成交总量" + value.values().stream().mapToInt(v -> v).sum());
             }
         });
 
